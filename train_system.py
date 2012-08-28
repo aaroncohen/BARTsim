@@ -119,6 +119,7 @@ class TrainSystem:
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     system = TrainSystem()
+    times = bart_api.real_time_departures(system)
     while True:
         active_trains = [train for train in system.trains if train.scheduled_active()]
         for train in active_trains:

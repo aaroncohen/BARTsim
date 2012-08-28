@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging
 import urlparse, urllib, urllib2
 from xml.etree.ElementTree import parse
 from dateutil import parser
@@ -15,6 +16,7 @@ def call_api(script, **kwargs):
     url = urlparse.urljoin(API_ROOT, script)
     kwargs.update({'key': API_KEY})
     args = urllib.urlencode(kwargs)
+    logging.info("Making API call: %s?%s" % (url, args))
     response = urllib2.urlopen("%s?%s" % (url, args), timeout=API_TIMEOUT)
     return response
 
@@ -143,12 +145,28 @@ def real_time_departures(system, station_name='ALL', direction=None):
     kwargs = {'cmd': 'etd'}
     if direction and station_name != 'ALL':
         kwargs['dir'] = direction[0:1].lower()
+    kwargs['orig'] = station_name
     xml = call_xml_api("etd.aspx", **kwargs)
     timestamp = extract_xml_timestamp(xml)
     xml_stations = xml.findall('station')
     train_times = {}
     for xml_station in xml_stations:
-        xml_trains = xml_station.findall('etd')
-        for xml_train in xml_trains:
-            station = system.station_for_abbr(xml_train.find('abbreviation').text)
+        departing_station = system.station_for_abbr(xml_station.find('abbr').text)
+        train_times[departing_station] = {}
+        xml_destinations = xml_station.findall('etd')
+        for xml_destination in xml_destinations:
+            dest_station = system.station_for_abbr(xml_destination.find('abbreviation').text)
+            train_times[departing_station][dest_station] = []
+            xml_trains = xml_destination.findall('estimate')
+            for xml_train in xml_trains:
+                # TODO: Handle case when minutes might be 'Leaving'...sometimes lasts several mins at the end of the night
+                departure_time = parse_date_time(timestamp) + timedelta(minutes=int(xml_train.find('minutes').text))
+                platform = int(xml_train.find('platform').text)
+                direction = xml_train.find('direction').text
+                length = int(xml_train.find('length').text)
 
+                train_times[departing_station][dest_station].append({'departure_time': departure_time,
+                                                                     'platform': platform,
+                                                                     'direction': direction,
+                                                                     'length': length})
+    return train_times
