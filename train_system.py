@@ -21,10 +21,14 @@ class TrainSystem:
         self.segments = []
         self.generate_segments()
 #        self.schedule = Schedule()
+        self.real_departures = {}
         self.trains = []
         self.create_trains()
         logging.info("Created TrainSystem. %d stations, %d routes, %d segments, %d mi of track, %d trains."\
                     % (len(self.stations), len(self.routes), len(self.segments), self.segments_distance(self.segments), len(self.trains)))
+
+    def update_real_departures(self):
+        self.real_departures = bart_api.real_time_departures(self)
 
     def generate_segments(self):
         logging.debug("Generating segments. %d existing already." % len(self.segments))
@@ -80,8 +84,7 @@ class TrainSystem:
             for i in range(1, len(route.origin_times)+1):
                 origin_times = route.origin_times[i]
                 self.trains.append(
-                    # Don't know number of cars until we get realtime info
-                    Train(i, origin_times, route, 0)
+                    Train(i, origin_times, route, self)
                 )
         logging.debug("Created %d trains, %d scheduled active" % (len(self.trains),
                                                                   len([train for train in self.trains if train.scheduled_active()])))
@@ -119,10 +122,11 @@ class TrainSystem:
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     system = TrainSystem()
-    times = bart_api.real_time_departures(system)
     while True:
-        active_trains = [train for train in system.trains if train.scheduled_active()]
+        # TODO: Determining active trains by the schedule doesn't cut it
+        active_trains = [train for train in system.trains]
         for train in active_trains:
+            system.update_real_departures()
             train.update_progress()
-        time.sleep(10)
+        time.sleep(20)
     logging.shutdown()

@@ -11,6 +11,7 @@ from station import Station
 API_ROOT = "http://api.bart.gov/api/"
 API_KEY = "MW9S-E7SL-26DU-VV8V"
 API_TIMEOUT = 5
+BART_TIME_CUTOFF = "2:27 AM"
 
 def call_api(script, **kwargs):
     url = urlparse.urljoin(API_ROOT, script)
@@ -129,12 +130,18 @@ def schedule_origin_times(system, schedule_num=None, route_num=None):
         train_num = int(xml_train.get('index'))
         xml_stops = xml_train.findall('stop')
 
+        stations_and_times = {}
+        for stop in xml_stops:
+            if stop.get('origTime'):
+                station = system.station_for_abbr(stop.get('station'))
+                date_time = parse_date_time("%s %s" % (date, stop.get('origTime')))
+                if date_time.hour >= 12 and (date_time.hour <= 2 and date_time.minute < 27):
+                    # correct for scheduled times past midnight
+                    date_time = date_time + timedelta(days=1)
+                stations_and_times[station] = date_time
+
         # { Station: DateTime }
-        stations_and_times =\
-            dict(
-                    (system.station_for_abbr(stop.get('station')), parse_date_time("%s %s" % (date, stop.get('origTime'))))
-                        for stop in xml_stops if stop.get('origTime')
-                )
+
         train_times[train_num] = stations_and_times
 
     # { 1: { Station: DateTime, Station2: DateTime }, 2: { Station: DateTime } }
@@ -160,13 +167,14 @@ def real_time_departures(system, station_name='ALL', direction=None):
             xml_trains = xml_destination.findall('estimate')
             for xml_train in xml_trains:
                 # TODO: Handle case when minutes might be 'Leaving'...sometimes lasts several mins at the end of the night
-                departure_time = parse_date_time(timestamp) + timedelta(minutes=int(xml_train.find('minutes').text))
+                countdown = int(str.replace(xml_train.find('minutes').text, 'Leaving', '0'))
+                departure_time = parse_date_time(timestamp) + timedelta(minutes=countdown)
                 platform = int(xml_train.find('platform').text)
                 direction = xml_train.find('direction').text
                 length = int(xml_train.find('length').text)
 
                 train_times[departing_station][dest_station].append({'departure_time': departure_time,
                                                                      'platform': platform,
-                                                                     'direction': direction,
+                                                                     'direction': direction.lower(),
                                                                      'length': length})
     return train_times
