@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import logging
 import urlparse, urllib, urllib2
 from xml.etree.ElementTree import parse
-from dateutil import parser
+from dateutil import parser, tz
 import schedule
 
 from route import Route
@@ -36,7 +36,9 @@ def extract_xml_timestamp(xml):
     return "%s %s" % (date, time)
 
 def parse_date_time(timestamp):
-    return parser.parse(timestamp, dayfirst=True)
+    no_tz = parser.parse(timestamp, dayfirst=True)
+    tz_aware = no_tz.replace(tzinfo=tz.tzlocal())
+    return tz_aware
 
 def train_count():
     xml = call_xml_api("bsa.aspx", cmd='count')
@@ -112,7 +114,7 @@ def schedule_list():
     for xml_schedule in xml_schedules:
         id = int(xml_schedule.find('id').text)
         effective_date = parse_date_time(xml_schedule.find('effectivedate'))
-        if effective_date < datetime.now():
+        if effective_date < datetime.now(tz=tz.tzlocal()):
             schedules.append(schedule.Schedule(id, effective_date))
             
 def schedule_origin_times(system, schedule_num=None, route_num=None):

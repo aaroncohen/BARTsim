@@ -124,7 +124,7 @@ if __name__ == '__main__':
     system = TrainSystem()
     while True:
         # TODO: Determining active trains by the schedule doesn't cut it
-        active_trains = [train for train in system.trains]
+        active_trains = [train for train in system.trains if train.scheduled_active()]
         for train in active_trains:
             system.update_real_departures()
             train.update_progress()

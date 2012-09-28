@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from dateutil import tz
 import logging
 from station import Station
 from utils import window
@@ -24,17 +25,18 @@ class Train:
         self.real_location_progress = self.scheduled_location_progress = 0.0 # 0.0 - 1.0 percentage...either traveled over a segment, or progress through station dwell time
         self.real_location_remaining = self.scheduled_location_remaining = timedelta(0)
 
+        self.delay_amount = 0
         self.schedule_offsets = []
 
     def scheduled_active(self):
         return not(self.scheduled_not_yet_started() or self.scheduled_ended())
 
     def scheduled_not_yet_started(self):
-        now = datetime.now()
+        now = datetime.now(tz=tz.tzlocal())
         return now <= (self.origin_time - DWELL_TIME)
 
     def scheduled_ended(self):
-        now = datetime.now()
+        now = datetime.now(tz=tz.tzlocal())
         return now >= (self.destination_time + DWELL_TIME)
 
     def direction(self, curr_location):
@@ -101,7 +103,7 @@ class Train:
             return None
 
     def update_scheduled_location(self):
-        now = datetime.now()
+        now = datetime.now(tz=tz.tzlocal())
         if self.scheduled_active():
             for station_a, station_b in window(self.stops):
                 station_a_dept_time = self.scheduled_departures[station_a]
@@ -131,7 +133,7 @@ class Train:
             self.scheduled_location_remaining = timedelta(seconds=0)
 
     def update_real_location(self):
-        now = datetime.now()
+        now = datetime.now(tz=tz.tzlocal())
         departures = self.system.real_departures
         next_station = self.next_stop(self.scheduled_location)
         stations_to_check = []
@@ -169,6 +171,8 @@ class Train:
                     continue
                 else:
                     arrival_time = match['departure_time'] - DWELL_TIME
+                    self.num_cars = match['length']
+                    self.delay_amount = match['departure_time'] - scheduled_departure
                     if now > arrival_time and now <= match['departure_time']:
                         self.real_location = station_to_check
                         self.real_location_progress = utils.time_range_progress(arrival_time, match['departure_time'], now)
@@ -188,5 +192,5 @@ class Train:
         pass
 
     def __repr__(self):
-        return "<Train: %s-%s, %d cars, %s>" % (self.origin.abbr, self.destination.abbr,
-                                                self.num_cars, self.origin_time.time())
+        return "<Train: %s-%s, %d cars, %s, %s late>" % (self.origin.abbr, self.destination.abbr,
+                                                self.num_cars, self.origin_time.time(), self.delay_amount)
